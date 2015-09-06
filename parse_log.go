@@ -156,16 +156,30 @@ func processprefix(s string) (string,PreTagsStruct) {
 	var index int
 	var pretag PreTagsStruct
 	index = strings.Index(s,"{")
-	//fmt.Println(index)
+	if index <= 20 {
+		fmt.Println("error in {")
+		return "",pretag
+	}
+	fmt.Println("index:",index)
 	prestr:=s[:index-1]
 	sufstr:=s[index:]
-	prestrs:=strings.Split(prestr,"|")
-	//fmt.Println("prestr:", prestr)
+	prestrs := strings.Split(prestr,"|")
+	if  len(prestrs) <= 3 {
+		fmt.Println("error in |")
+		return "",pretag
+	}
+	fmt.Println("prestr:", prestr)
 	if contains(config.Modules, prestrs[2]) {
-		pretag.Host = strings.TrimSpace(strings.Split(prestrs[0],":")[len(prestrs)-1])
+		tmp:=strings.Split(prestrs[0],":")
+		if len(tmp) <= 3 {
+			fmt.Println("error in :")
+			return "",pretag
+		}
+		pretag.Host = strings.TrimSpace(tmp[len(tmp)-1])
 		pretag.Time = prestrs[1]
 		pretag.Module = prestrs[2]
 	}else{
+		fmt.Println("log not in modules")
 		return "",pretag
 	}
 	return sufstr,pretag
@@ -176,7 +190,7 @@ func processlog(s string) error {
 	var pretag PreTagsStruct
 	js,pretag=processprefix(s)
 	if js == "" {
-		fmt.Println("process prefix error!")
+		fmt.Println("ignore this log!")
 		return nil
 	}
 	//fmt.Println("pretag:",pretag)
@@ -185,7 +199,7 @@ func processlog(s string) error {
 	
 	var r fb.Result
 	json.Unmarshal([]byte(js), &r)
-	fmt.Println(r)
+	//fmt.Println(r)
 	for _, val := range config.Metrics {
 		//fmt.Println(index)
 		processmetric(val, r, pretag)
