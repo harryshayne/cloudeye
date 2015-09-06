@@ -13,13 +13,19 @@ import (
 	"os"
 	//"strconv"
 	"time"
+	"strings"
 )
+
+type PreTagsStruct struct {
+	Host string
+	Module string
+	Time string
+}
 
 type ConfigStruct struct {
 	Metricname string   `json:"metricname"`
 	Value      string   `json:"value"`
 	C_type     string   `json:"type"`
-	Time       string   `json:"time"`
 	Tags       []string `json:"tags"`
 }
 
@@ -34,6 +40,7 @@ type InfluxdbConf struct {
 type ConfigArr struct {
 	Metrics          []ConfigStruct `json:"metrics"`
 	Filepath         string         `json:"filepath"`
+	Modules		 []string	`json:"modules"`
 	Backend_influxdb InfluxdbConf   `json:"backend_influxdb"`
 	con              *client.Client //global conn
 }
@@ -88,13 +95,13 @@ func readconf(filename string) error {
 		return err
 	}
 	if err := json.Unmarshal([]byte(bytes), &config); err != nil {
-		fmt.Println("Unmarshal: ", err.Error())
+		fmt.Println("Unmarshalin readconf: ", err.Error())
 		return err
 	}
 	return nil
 }
 
-func processmetric(c ConfigStruct, log fb.Result) error {
+func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	//fmt.Println("metricname:value|type|@smaple_rate|#tag1:value1,tagO2:value2")
 	s := fmt.Sprintf("%s:%f|%s|@smaple_rate|", c.Metricname, log[c.Value], c.C_type)
 	influxtags := make(map[string]string)
@@ -109,6 +116,8 @@ func processmetric(c ConfigStruct, log fb.Result) error {
 			s += t
 		}*/
 	}
+	influxtags["host"]=pretag.Host
+	influxtags["module"]=pretag.Module
 	fmt.Println(s)
 	/*logtime, err := strconv.ParseInt(log[c.Time].(string), 10, 0)
 	if err != nil {
@@ -131,14 +140,55 @@ func processmetric(c ConfigStruct, log fb.Result) error {
 	return nil
 }
 
-func processlog(s string) error {
+func contains(s []string, q string) bool {
+	if s == nil || len(s) == 0 {
+		return false
+	}
+	for _, a := range s {
+		if a == q {
+			return true
+		}
+	}
+	return false
+}
 
+func processprefix(s string) (string,PreTagsStruct) {
+	var index int
+	var pretag PreTagsStruct
+	index = strings.Index(s,"{")
+	//fmt.Println(index)
+	prestr:=s[:index-1]
+	sufstr:=s[index:]
+	prestrs:=strings.Split(prestr,"|")
+	//fmt.Println("prestr:", prestr)
+	if contains(config.Modules, prestrs[2]) {
+		pretag.Host = strings.TrimSpace(strings.Split(prestrs[0],":")[len(prestrs)-1])
+		pretag.Time = prestrs[1]
+		pretag.Module = prestrs[2]
+	}else{
+		return "",pretag
+	}
+	return sufstr,pretag
+}
+
+func processlog(s string) error {
+	var js string
+	var pretag PreTagsStruct
+	js,pretag=processprefix(s)
+	if js == "" {
+		fmt.Println("process prefix error!")
+		return nil
+	}
+	//fmt.Println("pretag:",pretag)
+	//fmt.Println("json:",js)
+	//fmt.Printf("Host:%v|Time:%v|Module:%v\n", pretag.Host, pretag.Time, pretag.Module)
+	
 	var r fb.Result
-	json.Unmarshal([]byte(s), &r)
-	//fmt.Println(r)
+	json.Unmarshal([]byte(js), &r)
+	fmt.Println(r)
 	for _, val := range config.Metrics {
 		//fmt.Println(index)
-		processmetric(val, r)
+		processmetric(val, r, pretag)
 	}
 	return nil
 }

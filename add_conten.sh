@@ -1,1 +1,1 @@
-echo '{"t":1441077637,"action":"getSession","cost": 213, "db_get_info_cost": 23,"redis_get_info_cost": 12,"ret": 0, "idc":"yg", "request":{"seqid":"661330e611a6459cba5f5637280202ec","sid":"61443WVUGANICCEMAA4A"},"response":{"err":0}}' >> ./messages
+echo 'Sep  6 15:20:28 localhost : 10.100.3.29|20150906152028|passport_session|6|{"action":"getSession","seqid":"7ac78a788d3d4d1c82751f12dd347574","request":{},"response":{},"used_time":5,"redis_used_time":2}' >> ./messages
