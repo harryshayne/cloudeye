@@ -107,7 +107,12 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	influxtags := make(map[string]string)
 
 	for _, val := range c.Tags {
-		influxtags[val] = log[val].(string)
+		var ok bool
+		influxtags[val],ok = log[val].(string)
+		if ok == false{
+			fmt.Println("tag is not a string:",val)
+			return nil
+		}
 		/*if index == 0 {
 			t := string("#") + string(val) + string(":") + log[val].(string)
 			s += t
@@ -123,6 +128,10 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	if err != nil {
 		return errors.New("strconv.ParseInt(log[c.Time] failed")
 	}*/
+	if log[c.Value] == nil {
+		fmt.Println("value is nil")
+		return nil
+	}
 	p := client.Point{
 		Measurement: c.Metricname,
 		Tags:        influxtags,
@@ -157,29 +166,29 @@ func processprefix(s string) (string,PreTagsStruct) {
 	var pretag PreTagsStruct
 	index = strings.Index(s,"{")
 	if index <= 20 {
-		fmt.Println("error in {")
+		//fmt.Println("error in {")
 		return "",pretag
 	}
-	fmt.Println("index:",index)
+	//fmt.Println("index:",index)
 	prestr:=s[:index-1]
 	sufstr:=s[index:]
 	prestrs := strings.Split(prestr,"|")
 	if  len(prestrs) <= 3 {
-		fmt.Println("error in |")
+		//fmt.Println("error in |")
 		return "",pretag
 	}
-	fmt.Println("prestr:", prestr)
+	//fmt.Println("prestr:", prestr)
 	if contains(config.Modules, prestrs[2]) {
 		tmp:=strings.Split(prestrs[0],":")
 		if len(tmp) <= 3 {
-			fmt.Println("error in :")
+			//fmt.Println("error in :")
 			return "",pretag
 		}
 		pretag.Host = strings.TrimSpace(tmp[len(tmp)-1])
 		pretag.Time = prestrs[1]
 		pretag.Module = prestrs[2]
 	}else{
-		fmt.Println("log not in modules")
+		//fmt.Println("log not in modules")
 		return "",pretag
 	}
 	return sufstr,pretag
@@ -190,7 +199,7 @@ func processlog(s string) error {
 	var pretag PreTagsStruct
 	js,pretag=processprefix(s)
 	if js == "" {
-		fmt.Println("ignore this log!")
+		//fmt.Println("ignore this log!")
 		return nil
 	}
 	//fmt.Println("pretag:",pretag)
