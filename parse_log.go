@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	//"errors"
+	"errors"
 	"fmt"
 	"github.com/ActiveState/tail"
 	fb "github.com/huandu/facebook"
@@ -11,7 +11,7 @@ import (
 	"log"
 	"net/url"
 	"os"
-	//"strconv"
+	"strconv"
 	"time"
 	"strings"
 )
@@ -103,7 +103,7 @@ func readconf(filename string) error {
 
 func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	//fmt.Println("metricname:value|type|@smaple_rate|#tag1:value1,tagO2:value2")
-	s := fmt.Sprintf("%s:%f|%s|@smaple_rate|", c.Metricname, log[c.Value], c.C_type)
+	s := fmt.Sprintf("%s:%f|%s|@smaple_rate|%s|%s", c.Metricname, log[c.Value], c.C_type,pretag.Module,pretag.Host)
 	influxtags := make(map[string]string)
 
 	for _, val := range c.Tags {
@@ -132,6 +132,18 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 		fmt.Println("value is nil")
 		return nil
 	}
+	//_, ok := log[c.Value].(float32)
+	if isdigit(log[c.Value])==false {
+    		fmt.Println("value is not digit")
+		return nil
+	}
+
+	location := time.Now().Location()
+  	timeloc, err := ConvStringToTime(pretag.Time, location)
+	if err != nil{
+		fmt.Println("illegal time format")
+		return nil
+	}
 	p := client.Point{
 		Measurement: c.Metricname,
 		Tags:        influxtags,
@@ -139,7 +151,7 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 			"value": log[c.Value],
 		},
 		//Time:      time.Unix(int64(log[c.Time].(float64)), 0),
-		Time:      time.Now(),
+		Time:      *timeloc,
 		Precision: "s",
 	}
 	var pts = make([]client.Point, 1)
@@ -147,6 +159,17 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	fmt.Println(pts)
 	write_influxdb(config.con, config.Backend_influxdb, pts)
 	return nil
+}
+
+func isdigit(i interface{}) bool{  
+    switch i.(type) {   
+    case int,int64:
+        return true
+    case float32,float64:
+        return true
+    default:
+	return false
+    }
 }
 
 func contains(s []string, q string) bool {
@@ -214,6 +237,39 @@ func processlog(s string) error {
 		processmetric(val, r, pretag)
 	}
 	return nil
+}
+
+func ConvStringToTime(str string, location *time.Location) (*time.Time, error) {
+	length := len(str)
+	if length != 14 && length !=8 {
+		return nil, errors.New("invalid date time,should be 20150907145712")
+	}
+	var err error
+	y, M, d, h, m, s := 0, 0, 0, 0, 0, 0
+	if y, err = strconv.Atoi(str[0:4]); err != nil {
+		return nil, err
+	}
+	if M, err = strconv.Atoi(str[4:6]); err != nil {
+		return nil, err
+	}
+	if d, err = strconv.Atoi(str[6:8]); err != nil {
+		return nil, err
+	}
+
+	if length == 14 {
+		if h, err = strconv.Atoi(str[8:10]); err != nil {
+			return nil, err
+		}
+		if m, err = strconv.Atoi(str[10:12]); err != nil {
+			return nil, err
+		}
+		if s, err = strconv.Atoi(str[12:14]); err != nil {
+			return nil, err
+		}
+
+	}
+	date := time.Date(y, time.Month(M), d, h, m, s, 0, location)
+	return &date, nil
 }
 
 func main() {
