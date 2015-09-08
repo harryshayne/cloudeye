@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 	"strings"
+	//"reflect"
 )
 
 type PreTagsStruct struct {
@@ -37,10 +38,16 @@ type InfluxdbConf struct {
 	Pwd      string `json:pwd`
 }
 
+type ModuleStruct struct {
+	Modulename string   `json:"modulename"`
+	Metrics          []ConfigStruct `json:"metrics"` 
+}
+
 type ConfigArr struct {
 	Metrics          []ConfigStruct `json:"metrics"`
 	Filepath         string         `json:"filepath"`
-	Modules		 []string	`json:"modules"`
+	Modulesenable	 []string	`json:"modulesenable"`
+	Modules		 []ModuleStruct	`json:"modules"`
 	Backend_influxdb InfluxdbConf   `json:"backend_influxdb"`
 	con              *client.Client //global conn
 }
@@ -107,10 +114,11 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	influxtags := make(map[string]string)
 
 	for _, val := range c.Tags {
+		//process tag,improve robust
 		var ok bool
 		influxtags[val],ok = log[val].(string)
 		if ok == false{
-			fmt.Println("tag is not a string:",val)
+			fmt.Println("tag is not a string or unexist:",val)
 			return nil
 		}
 		/*if index == 0 {
@@ -128,16 +136,28 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	if err != nil {
 		return errors.New("strconv.ParseInt(log[c.Time] failed")
 	}*/
+	//process value,improve robust
 	if log[c.Value] == nil {
 		fmt.Println("value is nil")
 		return nil
 	}
 	//_, ok := log[c.Value].(float32)
+	var valued float64
 	if isdigit(log[c.Value])==false {
-    		fmt.Println("value is not digit")
-		return nil
+		b,error := strconv.ParseFloat(string(log[c.Value].(string)),64)
+		if error!=nil{
+			fmt.Println("value can't change to digit")
+			return nil
+		}
+		valued=b
+	}else{
+		valued=float64(log[c.Value].(float64))
 	}
-
+	//cause influxdb client write func will change float64 digit like 18.0 into int64(this is bug),we manually add 0.00001 to that digit,then will always be float64 
+	if isint(valued){
+		valued+=0.00001
+	}
+	//format time
 	location := time.Now().Location()
   	timeloc, err := ConvStringToTime(pretag.Time, location)
 	if err != nil{
@@ -148,7 +168,7 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 		Measurement: c.Metricname,
 		Tags:        influxtags,
 		Fields: map[string]interface{}{
-			"value": log[c.Value],
+			"value": valued,
 		},
 		//Time:      time.Unix(int64(log[c.Time].(float64)), 0),
 		Time:      *timeloc,
@@ -157,20 +177,31 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	var pts = make([]client.Point, 1)
 	pts[0] = p
 	fmt.Println(pts)
+	//fmt.Println("p.valued type:",reflect.TypeOf(p.Fields["value"]))
 	write_influxdb(config.con, config.Backend_influxdb, pts)
 	return nil
 }
 
 func isdigit(i interface{}) bool{  
-    switch i.(type) {   
+    switch i.(type) {
     case int,int64:
-        return true
+	return true
     case float32,float64:
         return true
     default:
 	return false
     }
 }
+
+func isint(f float64) bool{
+	z:=f-float64(int(f))
+	if z==0{
+		return true
+	}else{
+		return false
+	}
+}
+
 
 func contains(s []string, q string) bool {
 	if s == nil || len(s) == 0 {
@@ -201,7 +232,7 @@ func processprefix(s string) (string,PreTagsStruct) {
 		return "",pretag
 	}
 	//fmt.Println("prestr:", prestr)
-	if contains(config.Modules, prestrs[2]) {
+	if contains(config.Modulesenable, prestrs[2]) {
 		tmp:=strings.Split(prestrs[0],":")
 		if len(tmp) <= 3 {
 			//fmt.Println("error in :")
@@ -232,10 +263,18 @@ func processlog(s string) error {
 	var r fb.Result
 	json.Unmarshal([]byte(js), &r)
 	//fmt.Println(r)
-	for _, val := range config.Metrics {
-		//fmt.Println(index)
-		processmetric(val, r, pretag)
+	for _, mval := range config.Modules {
+		if mval.Modulename == pretag.Module {
+			for _, val := range mval.Metrics {
+				//fmt.Println(index)
+				processmetric(val, r, pretag)
+			}		
+		}
 	}
+	//for _, val := range config.Metrics {
+		//fmt.Println(index)
+	//	processmetric(val, r, pretag)
+	//}
 	return nil
 }
 
@@ -275,7 +314,7 @@ func ConvStringToTime(str string, location *time.Location) (*time.Time, error) {
 func main() {
 	log.Println("Started!")
 	readconf("./conf/parse.conf")
-	fmt.Println(config)
+	fmt.Println("config:",config)
 	con, err := init_fluxdb(config.Backend_influxdb)
 	if err != nil {
 		fmt.Println("init_fluxdb error")
