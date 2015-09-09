@@ -112,7 +112,7 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	//fmt.Println("metricname:value|type|@smaple_rate|#tag1:value1,tagO2:value2")
 	s := fmt.Sprintf("%s:%f|%s|@smaple_rate|%s|%s", c.Metricname, log[c.Value], c.C_type,pretag.Module,pretag.Host)
 	influxtags := make(map[string]string)
-
+	fmt.Println(s)
 	for _, val := range c.Tags {
 		//process tag,improve robust
 		var ok bool
@@ -131,7 +131,7 @@ func processmetric(c ConfigStruct, log fb.Result, pretag PreTagsStruct) error {
 	}
 	influxtags["host"]=pretag.Host
 	influxtags["module"]=pretag.Module
-	fmt.Println(s)
+	
 	/*logtime, err := strconv.ParseInt(log[c.Time].(string), 10, 0)
 	if err != nil {
 		return errors.New("strconv.ParseInt(log[c.Time] failed")
